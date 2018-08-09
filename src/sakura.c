@@ -100,24 +100,62 @@ const GdkRGBA tango_palette[PALETTE_SIZE] = {
 	{0.933333, 0.933333, 0.92549,  1}
 };
 
+/* const GdkRGBA linux_palette[PALETTE_SIZE] = { */
+/* 	{0, 0, 0, 1}, */
+/* 	{213, 78, 83, 1}, */
+/* 	{185, 202, 74, 1}, */
+/* 	{230, 197, 71, 1}, */
+/* 	{122, 166, 218, 1}, */
+/* 	{195, 151, 216, 1}, */
+/* 	{112, 192, 186, 1}, */
+/* 	{255, 255, 255, 1}, */
+/* 	{102, 102, 102, 1}, */
+/* 	{255, 51, 52, 1}, */
+/* 	{158, 196, 0, 1}, */
+/* 	{231, 197, 71, 1}, */
+/* 	{122, 166, 218, 1}, */
+/* 	{183, 126, 224, 1}, */
+/* 	{84, 206, 214, 1}, */
+/* 	{255, 255, 255, 1} */
+/* }; */
+
 const GdkRGBA linux_palette[PALETTE_SIZE] = {
 	{0,        0,        0,        1},
-	{0.666667, 0,        0,        1},
-	{0,        0.666667, 0,        1},
-	{0.666667, 0.333333, 0,        1},
-	{0,        0,        0.666667, 1},
-	{0.666667, 0,        0.666667, 1},
-	{0,        0.666667, 0.666667, 1},
-	{0.666667, 0.666667, 0.666667, 1},
-	{0.333333, 0.333333, 0.333333, 1},
-	{1,        0.333333, 0.333333, 1},
-	{0.333333, 1,        0.333333, 1},
-	{1,        1,        0.333333, 1},
-	{0.333333, 0.333333, 1,        1},
-	{1,        0.333333, 1,        1},
-	{0.333333, 1,        1,        1},
-	{1,        1,        1,        1}
+	{145,      34,    38,        1},
+	{119,     137,    0, 1},
+	{174,     123,    0,        1},
+	{29,       37,    148, 1},
+	{104,    42,    155, 1},
+	{43,     102,    81, 1},
+	{146, 149, 147, 1},
+	{102, 102, 102, 1},
+	{204, 102, 102, 1},
+	{181, 189, 104, 1},
+	{240, 198, 116, 1},
+	{129, 162, 190, 1},
+	{178, 148, 187, 1},
+	{138, 190, 183, 1},
+	{236, 235, 236, 1}
 };
+
+/* const GdkRGBA linux_palette[PALETTE_SIZE] = { */
+/* 	{0,        0,        0,        1}, */
+/* 	{0.666667, 0,        0,        1}, */
+/* 	{0,        0.666667, 0,        1}, */
+/* 	{0.666667, 0.333333, 0,        1}, */
+/* 	{0,        0,        0.666667, 1}, */
+/* 	{0.666667, 0,        0.666667, 1}, */
+/* 	{0,        0.666667, 0.666667, 1}, */
+/* 	{0.666667, 0.666667, 0.666667, 1}, */
+/* 	{0.333333, 0.333333, 0.333333, 1}, */
+/* 	{1,        0.333333, 0.333333, 1}, */
+/* 	{0.333333, 1,        0.333333, 1}, */
+/* 	{1,        1,        0.333333, 1}, */
+/* 	{0.333333, 0.333333, 1,        1}, */
+/* 	{1,        0.333333, 1,        1}, */
+/* 	{0.333333, 1,        1,        1}, */
+/* 	{1,        1,        1,        1} */
+/* }; */
 
 const GdkRGBA solarized_dark_palette[PALETTE_SIZE] = {
 	{0.027451, 0.211765, 0.258824, 1},
@@ -1886,7 +1924,7 @@ sakura_set_palette(GtkWidget *widget, void *data)
 		} else if (strcmp(palette, "solarized_dark")==0) {
 			sakura.palette=solarized_dark_palette;
 		} else {
-			sakura.palette=solarized_light_palette;	
+			sakura.palette=solarized_light_palette;
 		}
 
 		/* Palette changed so we ¿need? to set colors again */
@@ -3136,7 +3174,6 @@ sakura_add_tab()
 	g_signal_connect(G_OBJECT(term->vte), "bell", G_CALLBACK(sakura_beep), NULL);
 	g_signal_connect(G_OBJECT(term->vte), "increase-font-size", G_CALLBACK(sakura_increase_font), NULL);
 	g_signal_connect(G_OBJECT(term->vte), "decrease-font-size", G_CALLBACK(sakura_decrease_font), NULL);
-	g_signal_connect(G_OBJECT(term->vte), "reset-font-size", G_CALLBACK(sakura_reset_font), NULL);
 	g_signal_connect(G_OBJECT(term->vte), "child-exited", G_CALLBACK(sakura_child_exited), NULL);
 	g_signal_connect(G_OBJECT(term->vte), "eof", G_CALLBACK(sakura_eof), NULL);
 	g_signal_connect(G_OBJECT(term->vte), "window-title-changed", G_CALLBACK(sakura_title_changed), NULL);
