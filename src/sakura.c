@@ -248,9 +248,11 @@ const GdkRGBA rxvt_palette[PALETTE_SIZE] = {
 	"padding : 0px;\n"\
 	"}"
 
-#define NUM_COLORSETS 6
+#define NUM_COLORSETS 1
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
+
+gint original_font_size;
 
 static struct {
 	GtkWidget *main_window;
@@ -311,7 +313,6 @@ static struct {
 	gint font_size_accelerator;
 	gint set_tab_name_accelerator;
 	gint search_accelerator;
-	gint set_colorset_accelerator;
 	gint add_tab_key;
 	gint del_tab_key;
 	gint prev_tab_key;
@@ -324,7 +325,7 @@ static struct {
 	gint fullscreen_key;
 	gint increase_font_size_key;
 	gint decrease_font_size_key;
-	gint set_colorset_keys[NUM_COLORSETS];
+	gint reset_font_size_key;
 	VteRegex *http_vteregexp, *mail_vteregexp;
 	char *argv[3];
 } sakura;
@@ -380,14 +381,10 @@ struct terminal {
 #define DEFAULT_SET_TAB_NAME_KEY  GDK_KEY_N
 #define DEFAULT_SEARCH_KEY  GDK_KEY_F
 #define DEFAULT_FULLSCREEN_KEY  GDK_KEY_F11
-#define DEFAULT_INCREASE_FONT_SIZE_KEY GDK_KEY_plus
-#define DEFAULT_DECREASE_FONT_SIZE_KEY GDK_KEY_minus
+#define DEFAULT_INCREASE_FONT_SIZE_KEY GDK_KEY_F2
+#define DEFAULT_DECREASE_FONT_SIZE_KEY GDK_KEY_F3
+#define DEFAULT_RESET_FONT_SIZE_KEY GDK_KEY_F1
 #define DEFAULT_SCROLLABLE_TABS TRUE
-
-/* make this an array instead of #defines to get a compile time
- * error instead of a runtime if NUM_COLORSETS changes */
-static int cs_keys[NUM_COLORSETS] = 
-		{GDK_KEY_F1, GDK_KEY_F2, GDK_KEY_F3, GDK_KEY_F4, GDK_KEY_F5, GDK_KEY_F6};
 
 #define ERROR_BUFFER_LENGTH 256
 const char cfg_group[] = "sakura";
@@ -426,6 +423,7 @@ static gboolean sakura_button_press (GtkWidget *, GdkEventButton *, gpointer);
 static void     sakura_beep (GtkWidget *, void *);
 static void     sakura_increase_font (GtkWidget *, void *);
 static void     sakura_decrease_font (GtkWidget *, void *);
+static void     sakura_reset_font (GtkWidget *, void *);
 static void     sakura_child_exited (GtkWidget *, void *);
 static void     sakura_eof (GtkWidget *, void *);
 static void     sakura_title_changed (GtkWidget *, void *);
@@ -477,7 +475,6 @@ static void     sakura_set_size(void);
 static void     sakura_set_keybind(const gchar *, guint);
 static guint    sakura_get_keybind(const gchar *);
 static void     sakura_config_done();
-static void     sakura_set_colorset (int);
 static void     sakura_set_colors (void);
 static guint    sakura_tokeycode(guint key);
 static void	sakura_fade_in(void);
@@ -658,14 +655,6 @@ sakura_key_press (GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 		}
 	}
 
-	/* Show scrollbar keybinding pressed */
-	if ( (event->state & sakura.scrollbar_accelerator)==sakura.scrollbar_accelerator ) {
-		if (keycode==sakura_tokeycode(sakura.scrollbar_key)) {
-			sakura_show_scrollbar(NULL, NULL);
-			return TRUE;
-		}
-	}
-
 	/* Set tab name keybinding pressed */
 	if ( (event->state & sakura.set_tab_name_accelerator)==sakura.set_tab_name_accelerator ) {
 		if (keycode==sakura_tokeycode(sakura.set_tab_name_key)) {
@@ -683,14 +672,15 @@ sakura_key_press (GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 	}
 
 	/* Increase/decrease font size keybinding pressed */
-	if ( (event->state & sakura.font_size_accelerator)==sakura.font_size_accelerator ) {
-		if (keycode==sakura_tokeycode(sakura.increase_font_size_key)) {
-			sakura_increase_font(NULL, NULL);
-			return TRUE;
-		} else if (keycode==sakura_tokeycode(sakura.decrease_font_size_key)) {
-			sakura_decrease_font(NULL, NULL);
-			return TRUE;
-		}
+	if (keycode==sakura_tokeycode(sakura.increase_font_size_key)) {
+		sakura_increase_font(NULL, NULL);
+		return TRUE;
+	} else if (keycode==sakura_tokeycode(sakura.decrease_font_size_key)) {
+		sakura_decrease_font(NULL, NULL);
+		return TRUE;
+	} else if (keycode==sakura_tokeycode(sakura.reset_font_size_key)) {
+		sakura_reset_font(NULL, NULL);
+		return TRUE;
 	}
 
 	/* F11 (fullscreen) pressed */
@@ -699,16 +689,6 @@ sakura_key_press (GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 		return TRUE;
 	}
 
-	/* Change in colorset */
-	if ( (event->state & sakura.set_colorset_accelerator)==sakura.set_colorset_accelerator ) {
-		int i;
-		for(i=0; i<NUM_COLORSETS; i++) {
-			if (keycode==sakura_tokeycode(sakura.set_colorset_keys[i])){
-				sakura_set_colorset(i);
-				return TRUE;
-			}
-		}
-	}
 	return FALSE;
 }
 
@@ -935,6 +915,16 @@ sakura_decrease_font (GtkWidget *widget, void *data)
 		sakura_set_size();
 		sakura_set_config_string("font", pango_font_description_to_string(sakura.font));
 	}
+}
+
+
+static void
+sakura_reset_font (GtkWidget *widget, void *data)
+{
+	pango_font_description_set_size(sakura.font, original_font_size);
+	sakura_set_font();
+	sakura_set_size();
+	sakura_set_config_string("font", pango_font_description_to_string(sakura.font));
 }
 
 
@@ -1248,25 +1238,6 @@ sakura_set_name_dialog (GtkWidget *widget, void *data)
 	gtk_widget_destroy(input_dialog);
 }
 
-static void 
-sakura_set_colorset (int cs)
-{
-	gint page;
-	struct terminal *term;
-
-	if (cs<0 || cs>= NUM_COLORSETS)
-		return;
-
-	page = gtk_notebook_get_current_page(GTK_NOTEBOOK(sakura.notebook));
-	term = sakura_get_page_term(sakura, page);	
-	term->colorset=cs;
-
-	sakura_set_config_integer("last_colorset", term->colorset+1);
-
-	sakura_set_colors();
-}
-
-
 /* Set the terminal colors for all notebook tabs */
 static void 
 sakura_set_colors ()
@@ -1284,6 +1255,8 @@ sakura_set_colors ()
 		                        &sakura.backcolors[term->colorset],
 		                        sakura.palette, PALETTE_SIZE);
 		vte_terminal_set_color_cursor(VTE_TERMINAL(term->vte), &sakura.curscolors[term->colorset]);
+		GdkRGBA ct = {0, 0, 0, 1};
+		vte_terminal_set_color_cursor_foreground(VTE_TERMINAL(term->vte), &ct);
 	}
 
 	/* Main window opacity must be set. Otherwise vte widget will remain opaque */
@@ -2242,12 +2215,6 @@ sakura_init()
 		cfgtmp = g_key_file_get_value(sakura.cfg, cfg_group, temp_name, NULL);
 		gdk_rgba_parse(&sakura.curscolors[i], cfgtmp);
 		g_free(cfgtmp);
-
-		sprintf(temp_name, "colorset%d_key", i+1);
-		if (!g_key_file_has_key(sakura.cfg, cfg_group, temp_name, NULL)) {
-			sakura_set_keybind(temp_name, cs_keys[i]);
-		}
-		sakura.set_colorset_keys[i]= sakura_get_keybind(temp_name);
 	}
 
 	if (!g_key_file_has_key(sakura.cfg, cfg_group, "last_colorset", NULL)) {
@@ -2265,6 +2232,7 @@ sakura_init()
 	}
 	cfgtmp = g_key_file_get_value(sakura.cfg, cfg_group, "font", NULL);
 	sakura.font = pango_font_description_from_string(cfgtmp);
+	original_font_size = pango_font_description_get_size(sakura.font);
 	free(cfgtmp);
 
 	if (!g_key_file_has_key(sakura.cfg, cfg_group, "show_always_first_tab", NULL)) {
@@ -2480,15 +2448,15 @@ sakura_init()
 	}
 	sakura.decrease_font_size_key = sakura_get_keybind("decrease_font_size_key");
 
+	if (!g_key_file_has_key(sakura.cfg, cfg_group, "reset_font_size_key", NULL)) {
+		sakura_set_keybind("reset_font_size_key", DEFAULT_RESET_FONT_SIZE_KEY);
+	}
+	sakura.reset_font_size_key = sakura_get_keybind("reset_font_size_key");
+
 	if (!g_key_file_has_key(sakura.cfg, cfg_group, "fullscreen_key", NULL)) {
 		sakura_set_keybind("fullscreen_key", DEFAULT_FULLSCREEN_KEY);
 	}
 	sakura.fullscreen_key = sakura_get_keybind("fullscreen_key");
-
-	if (!g_key_file_has_key(sakura.cfg, cfg_group, "set_colorset_accelerator", NULL)) {
-		sakura_set_config_integer("set_colorset_accelerator", DEFAULT_SELECT_COLORSET_ACCELERATOR);
-	}
-	sakura.set_colorset_accelerator = g_key_file_get_integer(sakura.cfg, cfg_group, "set_colorset_accelerator", NULL);
 
 	if (!g_key_file_has_key(sakura.cfg, cfg_group, "icon_file", NULL)) {
 		sakura_set_config_string("icon_file", ICON_FILE);
@@ -2566,7 +2534,8 @@ sakura_init()
 	if (error) g_error_free(error);
 
 	if (option_font) {
-		sakura.font=pango_font_description_from_string(option_font);
+		sakura.font = pango_font_description_from_string(option_font);
+		original_font_size = pango_font_description_get_size(sakura.font);
 	}
 
 	if (option_colorset && option_colorset>0 && option_colorset <= NUM_COLORSETS) {
@@ -3167,6 +3136,7 @@ sakura_add_tab()
 	g_signal_connect(G_OBJECT(term->vte), "bell", G_CALLBACK(sakura_beep), NULL);
 	g_signal_connect(G_OBJECT(term->vte), "increase-font-size", G_CALLBACK(sakura_increase_font), NULL);
 	g_signal_connect(G_OBJECT(term->vte), "decrease-font-size", G_CALLBACK(sakura_decrease_font), NULL);
+	g_signal_connect(G_OBJECT(term->vte), "reset-font-size", G_CALLBACK(sakura_reset_font), NULL);
 	g_signal_connect(G_OBJECT(term->vte), "child-exited", G_CALLBACK(sakura_child_exited), NULL);
 	g_signal_connect(G_OBJECT(term->vte), "eof", G_CALLBACK(sakura_eof), NULL);
 	g_signal_connect(G_OBJECT(term->vte), "window-title-changed", G_CALLBACK(sakura_title_changed), NULL);
