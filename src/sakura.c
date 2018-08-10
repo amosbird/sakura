@@ -348,7 +348,6 @@ static struct {
 	gint copy_accelerator;
 	gint scrollbar_accelerator;
 	gint open_url_accelerator;
-	gint font_size_accelerator;
 	gint set_tab_name_accelerator;
 	gint search_accelerator;
 	gint add_tab_key;
@@ -405,7 +404,6 @@ struct terminal {
 #define DEFAULT_COPY_ACCELERATOR  (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
 #define DEFAULT_SCROLLBAR_ACCELERATOR  (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
 #define DEFAULT_OPEN_URL_ACCELERATOR (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
-#define DEFAULT_FONT_SIZE_ACCELERATOR (GDK_CONTROL_MASK)
 #define DEFAULT_SET_TAB_NAME_ACCELERATOR (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
 #define DEFAULT_SEARCH_ACCELERATOR (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
 #define DEFAULT_SELECT_COLORSET_ACCELERATOR (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
@@ -616,90 +614,6 @@ sakura_key_press (GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 	
 	/* Use keycodes instead of keyvals. With keyvals, key bindings work only in US/ISO8859-1 and similar locales */
 	guint keycode = event->hardware_keycode;
-
-	/* Add/delete tab keybinding pressed */
-	if ( (event->state & sakura.add_tab_accelerator)==sakura.add_tab_accelerator &&
-			keycode==sakura_tokeycode(sakura.add_tab_key)) {
-		sakura_add_tab();
-		return TRUE;
-	} else if ( (event->state & sakura.del_tab_accelerator)==sakura.del_tab_accelerator &&
-			keycode==sakura_tokeycode(sakura.del_tab_key) ) {
-		/* Delete current tab */
-		sakura_close_tab(NULL, NULL);
-		return TRUE;
-	}
-
-	/* Switch tab keybinding pressed (numbers or next/prev) */
-	/* In cases when the user configured accelerators like these ones:
-		switch_tab_accelerator=4  for ctrl+next[prev]_tab_key
-		move_tab_accelerator=5  for ctrl+shift+next[prev]_tab_key
-	   move never works, because switch will be processed first, so it needs to be fixed with the following condition */
-	if ( ((event->state & sakura.switch_tab_accelerator) == sakura.switch_tab_accelerator) && 
-	     ((event->state & sakura.move_tab_accelerator) != sakura.move_tab_accelerator) ) {
-
-		if ((keycode>=sakura_tokeycode(GDK_KEY_1)) && (keycode<=sakura_tokeycode( GDK_KEY_9))) {  
-
-			/* User has explicitly disabled this branch, make sure to propagate the event */
-			if(sakura.disable_numbered_tabswitch) return FALSE;
-
-			if      (sakura_tokeycode(GDK_KEY_1) == keycode) topage = 0;
-			else if (sakura_tokeycode(GDK_KEY_2) == keycode) topage = 1;
-			else if (sakura_tokeycode(GDK_KEY_3) == keycode) topage = 2;
-			else if (sakura_tokeycode(GDK_KEY_4) == keycode) topage = 3;
-			else if (sakura_tokeycode(GDK_KEY_5) == keycode) topage = 4;
-			else if (sakura_tokeycode(GDK_KEY_6) == keycode) topage = 5;
-			else if (sakura_tokeycode(GDK_KEY_7) == keycode) topage = 6;
-			else if (sakura_tokeycode(GDK_KEY_8) == keycode) topage = 7;
-			else if (sakura_tokeycode(GDK_KEY_9) == keycode) topage = 8;
-			if (topage <= npages)
-				gtk_notebook_set_current_page(GTK_NOTEBOOK(sakura.notebook), topage);
-			return TRUE;
-		} else if (keycode==sakura_tokeycode(sakura.prev_tab_key)) {
-			if (gtk_notebook_get_current_page(GTK_NOTEBOOK(sakura.notebook))==0) {
-				gtk_notebook_set_current_page(GTK_NOTEBOOK(sakura.notebook), npages-1);
-			} else {
-				gtk_notebook_prev_page(GTK_NOTEBOOK(sakura.notebook));
-			}
-			return TRUE;
-		} else if (keycode==sakura_tokeycode(sakura.next_tab_key)) {
-			if (gtk_notebook_get_current_page(GTK_NOTEBOOK(sakura.notebook))==(npages-1)) {
-				gtk_notebook_set_current_page(GTK_NOTEBOOK(sakura.notebook), 0);
-			} else {
-				gtk_notebook_next_page(GTK_NOTEBOOK(sakura.notebook));
-			}
-			return TRUE;
-		} 
-	}
-
-	/* Move tab keybinding pressed */
-	if ( ((event->state & sakura.move_tab_accelerator) == sakura.move_tab_accelerator)) { 
-		if (keycode==sakura_tokeycode(sakura.prev_tab_key)) {
-			sakura_move_tab(BACKWARDS);
-			return TRUE;
-		} else if (keycode==sakura_tokeycode(sakura.next_tab_key)) {
-			sakura_move_tab(FORWARD);
-			return TRUE;
-		}
-	}
-
-	/* Copy/paste keybinding pressed */
-	if ( (event->state & sakura.copy_accelerator)==sakura.copy_accelerator ) {
-		if (keycode==sakura_tokeycode(sakura.copy_key)) {
-			sakura_copy(NULL, NULL);
-			return TRUE;
-		} else if (keycode==sakura_tokeycode(sakura.paste_key)) {
-			sakura_paste(NULL, NULL);
-			return TRUE;
-		}
-	}
-
-	/* Set tab name keybinding pressed */
-	if ( (event->state & sakura.set_tab_name_accelerator)==sakura.set_tab_name_accelerator ) {
-		if (keycode==sakura_tokeycode(sakura.set_tab_name_key)) {
-			sakura_set_name_dialog(NULL, NULL);
-			return TRUE;
-		}
-	}
 
 	/* Search keybinding pressed */
 	if ( (event->state & sakura.search_accelerator)==sakura.search_accelerator ) {
@@ -2415,11 +2329,6 @@ sakura_init()
 		sakura_set_config_integer("open_url_accelerator", DEFAULT_OPEN_URL_ACCELERATOR);
 	}
 	sakura.open_url_accelerator = g_key_file_get_integer(sakura.cfg, cfg_group, "open_url_accelerator", NULL);
-
-	if (!g_key_file_has_key(sakura.cfg, cfg_group, "font_size_accelerator", NULL)) {
-		sakura_set_config_integer("font_size_accelerator", DEFAULT_FONT_SIZE_ACCELERATOR);
-	}
-	sakura.font_size_accelerator = g_key_file_get_integer(sakura.cfg, cfg_group, "font_size_accelerator", NULL);
 
 	if (!g_key_file_has_key(sakura.cfg, cfg_group, "set_tab_name_accelerator", NULL)) {
 		sakura_set_config_integer("set_tab_name_accelerator", DEFAULT_SET_TAB_NAME_ACCELERATOR);
