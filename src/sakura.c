@@ -391,7 +391,7 @@ struct terminal {
 #define DEFAULT_FONT "Ubuntu Mono,monospace 12"
 #define FONT_MINIMAL_SIZE (PANGO_SCALE*6)
 #define DEFAULT_WORD_CHARS "-,./?%&#_~:"
-#define DEFAULT_PALETTE "solarized_dark"
+#define DEFAULT_PALETTE "xterm"
 #define TAB_MAX_SIZE 40
 #define TAB_MIN_SIZE 6
 #define FORWARD 1
@@ -403,7 +403,7 @@ struct terminal {
 #define DEFAULT_MOVE_TAB_ACCELERATOR (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
 #define DEFAULT_COPY_ACCELERATOR  (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
 #define DEFAULT_SCROLLBAR_ACCELERATOR  (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
-#define DEFAULT_OPEN_URL_ACCELERATOR (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
+#define DEFAULT_OPEN_URL_ACCELERATOR (GDK_CONTROL_MASK)
 #define DEFAULT_SET_TAB_NAME_ACCELERATOR (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
 #define DEFAULT_SEARCH_ACCELERATOR (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
 #define DEFAULT_SELECT_COLORSET_ACCELERATOR (GDK_CONTROL_MASK|GDK_SHIFT_MASK)
@@ -615,14 +615,6 @@ sakura_key_press (GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 	/* Use keycodes instead of keyvals. With keyvals, key bindings work only in US/ISO8859-1 and similar locales */
 	guint keycode = event->hardware_keycode;
 
-	/* Search keybinding pressed */
-	if ( (event->state & sakura.search_accelerator)==sakura.search_accelerator ) {
-		if (keycode==sakura_tokeycode(sakura.search_key)) {
-			sakura_search_dialog(NULL, NULL);
-			return TRUE;
-		}
-	}
-
 	/* Increase/decrease font size keybinding pressed */
 	if (keycode==sakura_tokeycode(sakura.increase_font_size_key)) {
 		sakura_increase_font(NULL, NULL);
@@ -662,7 +654,8 @@ sakura_button_press(GtkWidget *widget, GdkEventButton *button_event, gpointer us
 
 	/* Left button with accelerator: open the URL if any */
 	if (button_event->button == 1 &&
-	    ((button_event->state & sakura.open_url_accelerator) == sakura.open_url_accelerator) &&
+	    /* ((button_event->state & GDK_SHIFT_MASK) == GDK_SHIFT_MASK) && */
+	    ((button_event->state & GDK_CONTROL_MASK) == GDK_CONTROL_MASK) &&
 	    sakura.current_match) {
 
 		sakura_open_url(NULL, NULL);
@@ -671,7 +664,8 @@ sakura_button_press(GtkWidget *widget, GdkEventButton *button_event, gpointer us
 	}
 
 	/* Right button: show the popup menu */
-	if (button_event->button == 3) {
+	if (button_event->button == 3 &&
+	    ((button_event->state & GDK_SHIFT_MASK) == GDK_SHIFT_MASK)) {
 		GtkMenu *menu;
 		menu = GTK_MENU (widget);
 
@@ -751,65 +745,6 @@ sakura_focus_out(GtkWidget *widget, GdkEvent *event, void *data)
 	}
 
  	return FALSE;
-}
-
-
-/* Handler for notebook focus-in-event */
-//static gboolean
-//sakura_notebook_focus_in(GtkWidget *widget, void *data)
-//{
-//	struct terminal *term;
-//	int index;
-//
-//	index = gtk_notebook_get_current_page(GTK_NOTEBOOK(sakura.notebook));
-//	term = sakura_get_page_term(sakura, index);
-//
-//	/* If term is found stop event propagation */
-//	if(term != NULL) {
-//		gtk_widget_grab_focus(term->vte);
-//		return TRUE;
-//	}
-//
-//	return FALSE;
-//}
-
-
-/* Handler for notebook scroll-event - switches tabs by scroll direction
-   TODO: let scroll directions configurable */
-static gboolean
-sakura_notebook_scroll(GtkWidget *widget, GdkEventScroll *event)
-{
-	gint page, npages;
-
-	page = gtk_notebook_get_current_page(GTK_NOTEBOOK(sakura.notebook));
-	npages = gtk_notebook_get_n_pages(GTK_NOTEBOOK(sakura.notebook));
-	
-	switch(event->direction) {
-		case GDK_SCROLL_DOWN:
-		{
-			if (sakura.stop_tab_cycling_at_end_tabs == 1) {
-				gtk_notebook_set_current_page(GTK_NOTEBOOK(sakura.notebook), --page >= 0 ? page : 0);
-			} else {
-				gtk_notebook_set_current_page(GTK_NOTEBOOK(sakura.notebook), --page >= 0 ? page : npages - 1);
-			}
-			break;
-		} 
-		case GDK_SCROLL_UP:
-		{
-			if (sakura.stop_tab_cycling_at_end_tabs == 1) {
-				gtk_notebook_set_current_page(GTK_NOTEBOOK(sakura.notebook), ++page < npages ? page : npages - 1);
-			} else {
-				gtk_notebook_set_current_page(GTK_NOTEBOOK(sakura.notebook), ++page < npages ? page : 0);
-			}
-			break;
-		}
-		case GDK_SCROLL_LEFT:
-		case GDK_SCROLL_RIGHT:
-		case GDK_SCROLL_SMOOTH:
-			break;
-	}
-
-	return FALSE;
 }
 
 
@@ -1203,7 +1138,7 @@ sakura_set_colors ()
 		//SAY("Setting colorset %d", term->colorset+1);
 
 		vte_terminal_set_colors(VTE_TERMINAL(term->vte),
-		                        &sakura.forecolors[term->colorset], 
+		                        &sakura.forecolors[term->colorset],
 		                        &sakura.backcolors[term->colorset],
 		                        sakura.palette, PALETTE_SIZE);
 		vte_terminal_set_color_cursor(VTE_TERMINAL(term->vte), &sakura.curscolors[term->colorset]);
@@ -1579,26 +1514,15 @@ static void
 sakura_open_url (GtkWidget *widget, void *data)
 {
 	GError *error=NULL;
-	gchar *browser=NULL;
+	gchar *browser="luakit";
 
 	SAY("Opening %s", sakura.current_match);
-
-	browser=g_strdup(g_getenv("BROWSER"));
-
-	if (!browser) {
-		if ( !(browser = g_find_program_in_path("xdg-open")) ) {
-			/* TODO: Legacy for systems without xdg-open. This should be removed */
-			browser = g_strdup("firefox");
-		}
-	}
 
 	gchar * argv[] = {browser, sakura.current_match, NULL};
 	if (!g_spawn_async(".", argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, &error)) {
 		sakura_error("Couldn't exec \"%s %s\": %s", browser, sakura.current_match, error->message);
 		g_error_free(error);
 	}
-
-	g_free(browser);
 }
 
 
@@ -1606,14 +1530,11 @@ static void
 sakura_open_mail (GtkWidget *widget, void *data)
 {
 	GError *error = NULL;
-	gchar *program = NULL;
+	gchar *program = "mailto-i3";
 
-	if ( (program = g_find_program_in_path("xdg-email")) ) {
-		gchar * argv[] = { program, sakura.current_match, NULL };
-		if (!g_spawn_async(".", argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, &error)) {
-			sakura_error("Couldn't exec \"%s %s\": %s", program, sakura.current_match, error->message);
-		}
-		g_free(program);
+	gchar * argv[] = { program, sakura.current_match, NULL };
+	if (!g_spawn_async(".", argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, &error)) {
+		sakura_error("Couldn't exec \"%s %s\": %s", program, sakura.current_match, error->message);
 	}
 }
 
@@ -2529,11 +2450,7 @@ sakura_init()
 	g_signal_connect(G_OBJECT(sakura.main_window), "destroy", G_CALLBACK(sakura_destroy_window), NULL);
 	g_signal_connect(G_OBJECT(sakura.main_window), "key-press-event", G_CALLBACK(sakura_key_press), NULL);
 	g_signal_connect(G_OBJECT(sakura.main_window), "configure-event", G_CALLBACK(sakura_resized_window), NULL);
-	g_signal_connect(G_OBJECT(sakura.main_window), "focus-out-event", G_CALLBACK(sakura_focus_out), NULL);
-	g_signal_connect(G_OBJECT(sakura.main_window), "focus-in-event", G_CALLBACK(sakura_focus_in), NULL);
 	g_signal_connect(G_OBJECT(sakura.main_window), "show", G_CALLBACK(sakura_window_show_event), NULL);
-	//g_signal_connect(G_OBJECT(sakura.notebook), "focus-in-event", G_CALLBACK(sakura_notebook_focus_in), NULL);
-	g_signal_connect(sakura.notebook, "scroll-event", G_CALLBACK(sakura_notebook_scroll), NULL);
 }
 
 
